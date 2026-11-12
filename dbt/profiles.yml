@@ -13,6 +13,5 @@ retail_demo:
       schema: MARTS
       threads: 2
       client_session_keep_alive: false
-      session_parameters:
-        QUERY_TAG: retail-elt-demo-dbt
-        TIMEZONE: UTC
+      # The Snowflake dbt adapter exposes query_tag as a direct profile setting.
+      query_tag: retail-elt-demo-dbt

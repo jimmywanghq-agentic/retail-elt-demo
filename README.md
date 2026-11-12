@@ -57,6 +57,7 @@ If a batch runs longer than a minute, `max_active_runs=1` prevents overlapping w
 - A Snowflake account with permission to run the one-time setup as `ACCOUNTADMIN`.
 - Power BI Desktop. The supplied project uses PBIP/PBIR source files and a Snowflake DirectQuery model.
 - Internet access for the first image build and for Snowflake.
+- At least 10 GB of free disk space for image downloads, build layers, and data.
 
 Airflow, Spark, and dbt Core run locally. They require no hosted vendor subscriptions. Snowflake still requires authentication and consumes warehouse credits. An X-Small warehouse queried every minute can remain active continuously. Stop the demo and close the Power BI report when finished.
 
@@ -108,7 +109,7 @@ This changes `.env` to use `ELT_SERVICE` and `ELT_ROLE`. The pipeline never need
 .\scripts\Start-Demo.ps1
 ```
 
-The script builds the Docker image, tests the service account against Snowflake, and starts PostgreSQL, the UI, and Airflow. The first build downloads several large packages and can take several minutes. Airflow and dbt have separate Python environments inside the image to avoid dependency conflicts.
+The script builds the Docker image, tests the service account against Snowflake, and starts PostgreSQL, the UI, and Airflow. It waits for the UI and scheduler health checks before reporting that startup succeeded. The first build downloads several large packages and can take several minutes. Airflow and dbt have separate Python environments inside the image to avoid dependency conflicts.
 
 Open:
 
@@ -164,6 +165,12 @@ docker compose exec postgres psql -U demo -d retail -c "SELECT transaction_id, p
 
 # Test the exact automated Snowflake connection (browser authentication is separate).
 docker compose run --rm --no-deps orders-ui python scripts/test_snowflake.py
+
+# Check that retrying an API request does not create another purchase.
+python scripts/smoke_test.py
+
+# Stop automatic purchases, wait for a successful batch, then reconcile real data.
+docker compose exec orders-ui python scripts/verify_warehouse.py
 
 # Re-run incremental models and their tests.
 docker compose exec airflow bash -c 'cd /opt/demo/dbt && /home/airflow/dbt-venv/bin/dbt build --profiles-dir .'

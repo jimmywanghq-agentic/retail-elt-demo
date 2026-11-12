@@ -31,8 +31,16 @@ services:
 
   orders-ui:
     <<: *demo
-    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000"]
+    # Airflow's base-image entrypoint passes bash commands through unchanged.
+    command: [bash, -c, "exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     ports: ["127.0.0.1:8000:8000"]
+    # A started container is not necessarily ready to accept an order yet.
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status', timeout=4).read()"]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,6 +59,12 @@ services:
       AIRFLOW__CORE__PARALLELISM: "2"
     command: [bash, /opt/demo/scripts/airflow-start.sh]
     ports: ["127.0.0.1:8080:8080"]
+    healthcheck:
+      test: [CMD, python, -c, "import json,urllib.request; d=json.load(urllib.request.urlopen('http://localhost:8080/health', timeout=4)); assert d['scheduler']['status']=='healthy'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 12
     depends_on:
       postgres:
         condition: service_healthy

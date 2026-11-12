@@ -1,26 +1,47 @@
 # Current validation status
 
-The source is built and committed, but the complete live demo has not yet been verified.
+Validated on November 12, 2026. The complete PostgreSQL-to-Snowflake backend works. Power BI Desktop opened the supplied project and reached its Snowflake authentication dialog; report authentication and automatic page refresh remain to be completed by the user and verified.
 
-## Passed
+## Passed against the real running services
 
-- The workstation can reach the supplied Snowflake account hostname over port 443.
-- A read-only Snowsight query returned `CONNECTION_OK = 1` for account locator `TJ90853`.
-- Python source files parse successfully.
-- Docker Compose configuration validation succeeded before the engine became unavailable.
-- Git exclusions protect the local `.env`, generated private key, and generated setup SQL.
+- The revised Docker image built successfully, including Spark/Java and dbt's separate virtual environment.
+- The one-time approved Snowflake setup completed with `Demo resources ready`.
+- A key-pair connection from both Windows and the running container returned account `TJ90853`, user `ELT_SERVICE`, role `ELT_ROLE`, and warehouse `ELT_WH`.
+- PostgreSQL, the order UI, and Airflow passed their runtime health checks. Airflow's scheduler heartbeat and metadata database were healthy.
+- The order API saved a real synthetic purchase, returned the same transaction ID on a repeated request, and rejected an unknown product and zero quantity.
+- A purchase placed through the browser UI reached Snowflake on a scheduled Airflow run.
+- The UI simulator generated purchases every five seconds and stopped when requested.
+- Scheduled Airflow runs completed the Spark load and dbt transformation successfully. One-minute cron scheduling is active with one concurrent run allowed.
+- All three dbt models succeeded and all six data tests passed, including uniqueness, required fields, money calculations, and UTC transformation timing.
+- The exact reconciliation below passed after the simulator stopped and the delivery queue drained.
 
-## Still required before claiming the demo works end to end
+| Check | Observed result |
+|---|---:|
+| PostgreSQL purchases | 40 |
+| PostgreSQL undelivered purchases | 0 |
+| Snowflake RAW rows / distinct IDs | 40 / 40 |
+| dbt fact rows / distinct IDs | 40 / 40 |
+| PostgreSQL net revenue | $447.33 |
+| Snowflake fact net revenue | $447.33 |
+| Invalid UTC transformation timestamps | 0 |
 
-1. Free enough space on C: for Docker's image build and runtime data. The first build stopped with only about 50 MB free; Docker then stopped responding. A practical next step is to free at least 10 GB before retrying.
-2. Complete and confirm the one-time Snowflake setup that registers the restricted service account's public key.
-3. Finish the Docker image build, test the service-account connection, and start the services.
-4. Run `python scripts/smoke_test.py` against the running UI. It checks a real insert, retry deduplication, and rejected invalid inputs.
-5. Follow one order ID through a scheduled Airflow run, RAW, and the dbt fact table. Check the dbt tests pass and a subsequent run does not duplicate facts.
-6. Open the supplied Power BI project, complete data-source authentication, enable one-minute page refresh, and verify a newly placed order appears after the next batch and report refresh.
+Order #1 (two coffees with a 10% discount) produced the expected $8.10 net revenue. Order #3 was submitted directly through the browser UI and reached the reporting facts. Gaps in transaction IDs are normal: PostgreSQL sequences advance on attempted inserts, including retried requests, without creating duplicate purchase rows.
 
-The Power BI files are generated source definitions. They have not yet been opened and validated in Desktop. A Power BI Desktop window was present, but computer automation could not activate or capture its contents reliably.
+## Remaining Power BI verification
 
-The first image build exposed an Airflow/dbt dependency conflict. The Dockerfile now installs dbt in its own virtual environment. The retry got through the main requirements installation, then stopped when Docker lost its connection; the revised full image is not yet verified.
+1. Complete the Snowflake authentication dialog in the already-open Power BI project. Credentials are entered by the user and kept out of Git.
+2. Confirm the supplied visuals display the Snowflake facts.
+3. Enable one-minute automatic page refresh on the active DirectQuery report page and save the project.
+4. Submit another order in the separate UI, then verify its ID and changed metrics appear after a scheduled batch and automatic report refresh.
 
-The working source repository is `https://github.com/jwangdbe/retail-elt-demo`. An earlier browser-created repository under a different signed-in account contains only its initial README. This source repository uses the workstation's authenticated `jwangdbe` Git identity so changes can be pushed normally.
+Until those steps pass, do not describe the complete dashboard path as verified. The simulator is stopped after reconciliation; the UI and scheduled pipeline remain running.
+
+## Fixes confirmed during runtime testing
+
+- dbt has a separate Python environment to avoid conflicting with Airflow's dependencies.
+- The order UI launches through bash so Airflow's base-image entrypoint does not treat `uvicorn` as an Airflow subcommand.
+- Startup health checks distinguish a created container from a ready service.
+- The dbt transformation timestamp explicitly converts to UTC instead of inheriting the Snowflake account timezone. Existing facts were rebuilt and the new timing test passed.
+- The dbt profile uses the adapter's supported `query_tag` field.
+
+Git exclusions protect `.env`, generated private keys, setup SQL with the generated public key, dbt build outputs, and Power BI's local caches. The working source repository is `https://github.com/jwangdbe/retail-elt-demo`.

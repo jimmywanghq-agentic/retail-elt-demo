@@ -10,7 +10,7 @@ if ($LASTEXITCODE -ne 0) { throw 'The Docker image could not be built.' }
 # Fail early if the service key or Snowflake permissions are incorrect.
 docker compose run --rm --no-deps orders-ui python scripts/test_snowflake.py
 if ($LASTEXITCODE -ne 0) { throw 'Snowflake connection test failed. See the message above.' }
-docker compose up -d
+docker compose up -d --wait --wait-timeout 180
 if ($LASTEXITCODE -ne 0) { throw 'The demo could not start.' }
 Write-Host 'Order UI: http://localhost:8000'
 Write-Host 'Airflow:  http://localhost:8080  (demo / demo_local_only)'
