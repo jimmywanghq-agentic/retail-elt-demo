@@ -1,0 +1,59 @@
+name: retail-elt-demo
+# One shared image keeps Spark, dbt and Airflow on compatible Python versions.
+x-demo: &demo
+  build: .
+  image: retail-elt-demo:local
+  env_file: .env
+  environment: &demo-env
+    PYTHONPATH: /opt/demo
+    SOURCE_DSN: postgresql://demo:demo_local_only@postgres:5432/retail
+    SNOWFLAKE_PRIVATE_KEY_PATH: /opt/demo/secrets/snowflake_key.p8
+    DBT_PROFILES_DIR: /opt/demo/dbt
+  volumes:
+    - .:/opt/demo
+
+services:
+  postgres:
+    image: postgres:16.8
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo_local_only
+      POSTGRES_DB: retail
+    volumes:
+      - source-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U demo -d retail]
+      interval: 5s
+      retries: 20
+    # Keep the demo database reachable only from this computer.
+    ports: ["127.0.0.1:5433:5432"]
+
+  orders-ui:
+    <<: *demo
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000"]
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow:
+    <<: *demo
+    environment:
+      <<: *demo-env
+      # Airflow keeps its own scheduling history separate from the retail tables.
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://demo:demo_local_only@postgres:5432/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/demo/dags
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+      AIRFLOW__CORE__PARALLELISM: "2"
+    command: [bash, /opt/demo/scripts/airflow-start.sh]
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  source-data:

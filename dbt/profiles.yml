@@ -1,0 +1,18 @@
+# Environment variables keep credentials out of the version-controlled profile.
+retail_demo:
+  target: demo
+  outputs:
+    demo:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'ELT_ROLE') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'ELT_WH') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'RETAIL_DEMO') }}"
+      schema: MARTS
+      threads: 2
+      client_session_keep_alive: false
+      session_parameters:
+        QUERY_TAG: retail-elt-demo-dbt
+        TIMEZONE: UTC

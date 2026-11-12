@@ -1,0 +1,4 @@
+# dbt gets its own environment because its dependencies differ from Airflow's.
+dbt-core==1.9.4
+dbt-snowflake==1.9.2
+snowflake-connector-python[pandas]==3.14.0

@@ -1,0 +1,3 @@
+# Linux containers need LF line endings, especially for the Airflow shell script.
+* text=auto eol=lf
+*.ps1 text eol=crlf

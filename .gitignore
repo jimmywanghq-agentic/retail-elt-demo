@@ -1,0 +1,16 @@
+# Credentials belong on your computer, never in GitHub.
+.env
+.env.*
+!.env.example
+secrets/
+*.p8
+*.pem
+# These are temporary files created when the demo runs.
+__pycache__/
+.pytest_cache/
+logs/
+target/
+dbt_packages/
+**/.pbi/
+*.pbix
+*.zip

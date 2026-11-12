@@ -1,0 +1,8 @@
+# Pin versions so the same demo can be rebuilt later.
+apache-airflow==2.10.5
+pyspark==3.5.4
+snowflake-connector-python[pandas]==3.14.0
+psycopg[binary]==3.2.6
+fastapi==0.115.11
+uvicorn==0.34.0
+cryptography>=44,<45

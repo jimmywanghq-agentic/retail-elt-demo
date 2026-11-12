@@ -1,0 +1,17 @@
+version: 2
+sources:
+  - name: retail_raw
+    database: "{{ env_var('SNOWFLAKE_DATABASE', 'RETAIL_DEMO') }}"
+    schema: RAW
+    tables:
+      - name: ORDERS
+models:
+  - name: fact_orders
+    description: One row per purchased product, incrementally merged by transaction ID.
+    columns:
+      - name: transaction_id
+        data_tests: [unique, not_null]
+      - name: net_revenue
+        data_tests: [not_null]
+      - name: ordered_at
+        data_tests: [not_null]

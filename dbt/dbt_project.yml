@@ -1,0 +1,15 @@
+name: retail_demo
+version: '1.0.0'
+config-version: 2
+profile: retail_demo
+model-paths: [models]
+test-paths: [tests]
+clean-targets: [target, dbt_packages]
+models:
+  retail_demo:
+    # Staging views clean raw data; reporting models live in MARTS.
+    staging:
+      +schema: STAGING
+      +materialized: view
+    marts:
+      +schema: MARTS

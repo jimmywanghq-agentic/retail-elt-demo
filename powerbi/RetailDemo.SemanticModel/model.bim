@@ -1,0 +1,166 @@
+{
+  "name": "RetailDemo",
+  "compatibilityLevel": 1600,
+  "model": {
+    "culture": "en-US",
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "dataAccessOptions": {
+      "legacyRedirects": true,
+      "returnErrorValuesAsNull": true
+    },
+    "tables": [
+      {
+        "name": "Orders",
+        "description": "One purchased product per row, loaded by Spark and incrementally transformed by dbt.",
+        "columns": [
+          {
+            "name": "TRANSACTION_ID",
+            "dataType": "int64",
+            "sourceColumn": "TRANSACTION_ID",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "ORDERED_AT",
+            "dataType": "dateTime",
+            "sourceColumn": "ORDERED_AT",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "ORDER_MINUTE",
+            "dataType": "dateTime",
+            "sourceColumn": "ORDER_MINUTE",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "STORE",
+            "dataType": "string",
+            "sourceColumn": "STORE",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "PRODUCT",
+            "dataType": "string",
+            "sourceColumn": "PRODUCT",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "CATEGORY",
+            "dataType": "string",
+            "sourceColumn": "CATEGORY",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "QUANTITY",
+            "dataType": "int64",
+            "sourceColumn": "QUANTITY",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "UNIT_PRICE",
+            "dataType": "decimal",
+            "sourceColumn": "UNIT_PRICE",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "DISCOUNT_PCT",
+            "dataType": "int64",
+            "sourceColumn": "DISCOUNT_PCT",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "SOURCE",
+            "dataType": "string",
+            "sourceColumn": "SOURCE",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "GROSS_REVENUE",
+            "dataType": "decimal",
+            "sourceColumn": "GROSS_REVENUE",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "DISCOUNT_AMOUNT",
+            "dataType": "decimal",
+            "sourceColumn": "DISCOUNT_AMOUNT",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "NET_REVENUE",
+            "dataType": "decimal",
+            "sourceColumn": "NET_REVENUE",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "LOADED_AT",
+            "dataType": "dateTime",
+            "sourceColumn": "LOADED_AT",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "TRANSFORMED_AT",
+            "dataType": "dateTime",
+            "sourceColumn": "TRANSFORMED_AT",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "Snowflake Orders",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Snowflake.Databases(\"CQCLXXG-EF86683.snowflakecomputing.com\", \"ELT_WH\", [Role=\"RETAIL_REPORTER\", Implementation=\"2.0\"]),",
+                "    Database = Source{[Name=\"RETAIL_DEMO\", Kind=\"Database\"]}[Data],",
+                "    Schema = Database{[Name=\"MARTS\", Kind=\"Schema\"]}[Data],",
+                "    Orders = Schema{[Name=\"FACT_ORDERS\", Kind=\"Table\"]}[Data]",
+                "in",
+                "    Orders"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "Revenue",
+            "expression": "SUM(Orders[NET_REVENUE])",
+            "formatString": "$#,0.00",
+            "description": "Revenue is calculated from current Snowflake facts."
+          },
+          {
+            "name": "Transactions",
+            "expression": "COUNTROWS(Orders)",
+            "formatString": "#,0",
+            "description": "Transactions is calculated from current Snowflake facts."
+          },
+          {
+            "name": "Average Basket",
+            "expression": "DIVIDE([Revenue], [Transactions], 0)",
+            "formatString": "$#,0.00",
+            "description": "Average Basket is calculated from current Snowflake facts."
+          },
+          {
+            "name": "Latest Order",
+            "expression": "MAX(Orders[ORDERED_AT])",
+            "formatString": "yyyy-MM-dd HH:mm:ss",
+            "description": "Latest Order is calculated from current Snowflake facts."
+          },
+          {
+            "name": "Latest Order ID",
+            "expression": "MAX(Orders[TRANSACTION_ID])",
+            "formatString": "#,0",
+            "description": "Latest Order ID is calculated from current Snowflake facts."
+          }
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "name": "Learning note",
+        "value": "DirectQuery reads Snowflake when visuals refresh; it does not import a static snapshot."
+      }
+    ]
+  }
+}

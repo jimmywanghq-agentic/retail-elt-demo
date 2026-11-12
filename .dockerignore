@@ -1,0 +1,9 @@
+# Only the requirements are copied today; these exclusions also protect future COPY steps.
+.git
+.env
+.env.*
+secrets
+logs
+dbt/target
+dbt/logs
+powerbi
