@@ -3,7 +3,7 @@
 set -euo pipefail
 airflow db migrate
 # Airflow needs a local UI login even though the software itself is open source.
-airflow users list --output json | python -c 'import json,sys; sys.exit(0 if any(u["username"]=="demo" for u in json.load(sys.stdin)) else 1)' || 
+airflow users list --output json | python -c 'import json,sys; sys.exit(0 if any(u["username"]=="demo" for u in json.load(sys.stdin)) else 1)' ||
   airflow users create --username demo --password demo_local_only --firstname Demo --lastname Learner --role Admin --email demo@example.invalid
 airflow scheduler &
 scheduler_pid=$!
