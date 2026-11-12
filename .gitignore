@@ -11,6 +11,8 @@ __pycache__/
 logs/
 target/
 dbt_packages/
+# dbt creates a local analytics identifier; it is not project source.
+dbt/.user.yml
 **/.pbi/
 *.pbix
 *.zip
