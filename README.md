@@ -431,7 +431,9 @@ ORDER BY ORDER_MINUTE DESC
 LIMIT 10;
 ```
 
-### Open the Snowflake SQL editor and see your orders
+### Verify the final Snowflake table used by Power BI
+
+This query verifies `RETAIL_DEMO.MARTS.FACT_ORDERS`, the final reporting table that the Power BI report reads through DirectQuery. Use it to confirm that your submitted order reached the reporting layer and that dbt calculated its revenue and discount correctly. It checks the Snowflake data; it does not itself refresh Power BI or prove that the report has refreshed.
 
 Start with these steps if you do not know where to enter SQL:
 
