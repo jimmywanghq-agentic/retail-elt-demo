@@ -73,9 +73,9 @@ The `.env` file has already been created for the current machine. For a fresh cl
 Copy-Item .env.example .env
 ```
 
-Fill in your account identifier and your existing setup username. The warehouse/database/schema names are demo defaults created by the setup SQL. Do not create them manually in advance.
+The example already contains this demo account identifier, `CQCLXXG-EF86683`, and setup login, `JIMMY.WANG.HQ@GMAIL.COM`. If using another Snowflake account, replace both values with your own. The warehouse/database/schema names are demo defaults created by the setup SQL. Do not create them manually in advance.
 
-The actual `.env`, generated keys, and Power BI local caches are excluded from Git. `.env.example` documents the expected settings without real credentials.
+The actual `.env`, generated keys, and Power BI local caches are excluded from Git. `.env.example` contains account/login identifiers, not authentication credentials. Sign into Snowflake through Google to run the one-time setup; later automated connections authenticate as `ELT_SERVICE` using the registered private key, not Google sign-in.
 
 ### 2. Prepare and review Snowflake setup
 
