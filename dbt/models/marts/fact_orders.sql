@@ -1,10 +1,7 @@
-{# Keep the existing table and process new arrivals on later runs, instead of rebuilding all history. #}
-{{ config(
-    materialized='incremental',
-    unique_key='transaction_id',
-    incremental_strategy='merge'
-) }}
-{# Above: transaction_id identifies an existing purchase; merge updates matching IDs or inserts missing IDs. #}
+{# materialized='incremental' keeps the existing table and processes new arrivals on later runs. #}
+{# unique_key='transaction_id' tells dbt which column identifies the same purchase across runs. #}
+{# incremental_strategy='merge' updates matching IDs and inserts missing IDs instead of appending duplicates. #}
+{{ config(materialized='incremental', unique_key='transaction_id', incremental_strategy='merge') }}
 
 -- Start choosing the columns that Power BI will see in the reporting table.
 select

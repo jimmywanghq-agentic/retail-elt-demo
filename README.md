@@ -138,12 +138,190 @@ docker compose exec airflow airflow dags trigger retail_every_minute
 
 The simulator initially stays off. Click **Start automatic orders** to generate one purchase every five seconds (or change the interval). Click it again to stop.
 
+## Follow one order through the demo, step by step
+
+Use this tutorial after completing the one-time setup above. Docker Desktop must be running, the Docker image must already be built, and the local `.env` and Snowflake service key must exist. The source database keeps its existing orders when the demo restarts.
+
+### Step 1: start Airflow and its PostgreSQL dependency
+
+Open PowerShell and enter the project folder. On this machine:
+
+```powershell
+# Work in the folder containing compose.yaml so Docker finds this demo's services.
+cd "C:\Users\pcc20\Documents\Codex\2026-11-12\i-wa\outputs\retail-elt-demo"
+
+# Start Airflow; Docker also starts PostgreSQL because Airflow depends on it.
+# Wait until the services are healthy instead of assuming a started process is ready.
+docker compose up -d --wait --wait-timeout 180 airflow
+
+# Enable the one-minute schedule, including if you paused the DAG during an earlier exercise.
+docker compose exec airflow airflow dags unpause retail_every_minute
+```
+
+You do not need to start a hosted Spark or dbt service. Airflow starts Spark for a batch and runs the installed dbt command after loading succeeds.
+
+### Step 2: start and open the separate order UI
+
+```powershell
+# Start the order-entry server and wait until its API can answer requests.
+docker compose up -d --wait --wait-timeout 180 orders-ui
+
+# Confirm PostgreSQL, Airflow, and the order UI are running and healthy.
+docker compose ps
+```
+
+Open [http://localhost:8000](http://localhost:8000). Leave automatic orders stopped for this exercise so your one purchase is easy to follow.
+
+### Step 3: submit one purchase and remember its ID
+
+Choose a store and product, enter a quantity, and click **Place order**. The page confirms an order number, such as `Order #42 saved to PostgreSQL.` Write down your actual number; `42` below is only an example.
+
+For an easy amount to check, choose Coffee, quantity 2, and discount 10%. Its expected net revenue is $8.10. The UI shows **Waiting** until a loader acknowledges delivery to Snowflake RAW, then **Delivered**. Delivered does not yet prove dbt or Power BI has finished.
+
+### Step 4: inspect the newest order in PostgreSQL
+
+Run this from the same PowerShell window:
+
+```powershell
+# Read the purchase with the largest ID, which is normally the one you just submitted.
+docker compose exec postgres psql -U demo -d retail -c "SELECT * FROM orders ORDER BY transaction_id DESC LIMIT 1;"
+```
+
+The SQL inside that command is:
+
+```sql
+-- Read the source table where the order-entry application saved the purchase.
+SELECT *
+-- Use our local retail database's orders table.
+FROM orders
+-- Put the newest assigned purchase ID first.
+ORDER BY transaction_id DESC
+-- Return one purchase instead of the entire history.
+LIMIT 1;
+```
+
+Check `transaction_id`, `ordered_at`, store/product/quantity, and `delivered_at`. A blank `delivered_at` means the purchase has not yet been acknowledged by the loader. A timestamp means the Snowflake RAW merge succeeded. If the batch already ran before you queried, this field may already contain a timestamp.
+
+If another order was submitted after yours, query your saved ID instead:
+
+```powershell
+# Replace 42 with the ID confirmed by your own order form.
+$orderId = 42
+
+# Read that exact purchase even if newer purchases have arrived.
+docker compose exec postgres psql -U demo -d retail -c "SELECT * FROM orders WHERE transaction_id = $orderId;"
+```
+
+**How to exit the output:** if you see `(END)`, press **q** to close the scrolling results viewer and return to PowerShell. If you opened an interactive session and see `retail=#`, type **\q** and press Enter. With `psql -c`, the command otherwise exits by itself after printing the result. Closing this results viewer does not stop PostgreSQL or the pipeline.
+
+### Step 5: find the order's batch in the Airflow website
+
+Open [http://localhost:8080](http://localhost:8080) and sign in:
+
+1. **Username:** `demo`
+2. **Password:** `demo_local_only`
+3. **DAG:** `retail_every_minute`
+
+Open the DAG and select **Grid**. Find a run whose actual start time is after you submitted the purchase. Select the corresponding task cell, not a different run's task. Airflow displays task states with a color legend; **success** is green. A run in progress may show running or queued tasks until it finishes.
+
+The run's ID can look one minute earlier than its actual start time: a scheduled run labels the minute interval that just ended. Match the actual start time and purchase ID instead of relying only on the timestamp inside the run ID. Airflow may display UTC unless you change its display timezone; compare timezone-aware timestamps carefully.
+
+**First, inspect `spark_postgres_to_snowflake`:** select its task cell and open **Logs**. A batch containing your order prints messages like these:
+
+```text
+Delivered 1 orders to Snowflake RAW.
+Loaded transaction IDs (first 50): [42]
+```
+
+These numbers are examples. Search the logs for your actual order ID. If that run says `No new orders. Nothing to load.`, look at the neighboring run: an earlier batch may already have delivered the purchase, or the next batch may pick it up. A batch that has already selected its IDs will not include a purchase submitted afterward.
+
+**You can also inspect the task's small result:** look for **XCom** on the selected task. Depending on the UI layout, use **Admin → XComs** and filter by the DAG, task, and run instead. Inspect the key **`return_value`**. For one loaded order, the summary looks like:
+
+```json
+{
+  "loaded_orders": 1,
+  "transaction_ids": [42],
+  "ids_truncated": false
+}
+```
+
+The loader lists at most 50 IDs so Airflow's metadata stays small. `ids_truncated: true` means more orders were loaded than are listed. An empty batch returns a count of zero and an empty list. Runs from before this result-summary feature was added may have no such XCom.
+
+**Second, inspect `dbt_incremental_models_and_tests`:** select its cell for the same run and open **Logs**. Check that `MARTS.fact_orders` succeeded, all data tests passed, and the command ended with return code 0. A RAW delivery followed by a failed dbt task means the purchase is loaded but the reporting layer still needs a successful transformation.
+
+Yes, Airflow shows execution results: task state, start/end times, duration, logs, errors, retries, and this small batch summary. It does not automatically display the entire PostgreSQL or Snowflake table. The ID in the loading result identifies the purchase; query Snowflake below to inspect its actual transformed values.
+
+### Step 6: confirm that exact purchase in Snowflake
+
+In a Snowsight SQL worksheet, run this and replace `42` with your ID:
+
+```sql
+-- Find the original loaded row by its purchase ID.
+SELECT *
+-- Read the RAW table filled by Spark's loader.
+FROM RETAIL_DEMO.RAW.ORDERS
+-- Replace this sample ID with the number confirmed by your order form.
+WHERE TRANSACTION_ID = 42;
+
+-- Inspect the business calculations created by the dbt fact model.
+SELECT TRANSACTION_ID, QUANTITY, UNIT_PRICE, DISCOUNT_PCT,
+       GROSS_REVENUE, DISCOUNT_AMOUNT, NET_REVENUE,
+       LOADED_AT, TRANSFORMED_AT
+-- Read the reporting table, which is created after RAW loading succeeds.
+FROM RETAIL_DEMO.MARTS.FACT_ORDERS
+-- Use the same purchase ID so you compare the same row across both layers.
+WHERE TRANSACTION_ID = 42;
+```
+
+For two coffees at $4.50 with a 10% discount, verify gross revenue $9.00, discount $0.90, and net revenue $8.10. Re-run the PostgreSQL query too: `delivered_at` should now be filled in. Another pipeline run should not create a second fact row with that transaction ID.
+
+### Step 7: check the report and stop the demo afterward
+
+After the Power BI dashboard layout and its automatic refresh have been verified, keep its DirectQuery page active and look for the same purchase ID after the next report refresh. PostgreSQL-to-Snowflake processing runs every minute, while report refresh happens on its own clock. A purchase can therefore take more than 60 seconds to appear in the report.
+
+You can turn on automatic orders to watch repeated batches. Turn the simulator off before exact row-count/revenue comparisons. The current live validation status is recorded in [VALIDATION.md](VALIDATION.md); a working backend alone does not establish that the Power BI visuals are fully verified.
+
+```powershell
+# Stop the local services while keeping the PostgreSQL data volume.
+.\scripts\Stop-Demo.ps1
+```
+
+Close the Power BI live report as well so it stops querying Snowflake and the warehouse can auto-suspend.
+
+## Where dbt's ref() and source() are defined
+
+A SQL file inside `dbt/models` defines a model. The filename without `.sql` is its model name. The SQL describes which rows and columns it should return; dbt's settings decide whether to create a view, a table, or an incremental table from that query.
+
+- [stg_orders.sql](dbt/models/staging/stg_orders.sql) defines the model `stg_orders`. The staging settings in [dbt_project.yml](dbt/dbt_project.yml) create it as a view in `STAGING`.
+- [fact_orders.sql](dbt/models/marts/fact_orders.sql) defines the model `fact_orders`. Its `config()` sets an incremental table that merges by `transaction_id`.
+- `ref('stg_orders')` is a built-in dbt function that finds the model named `stg_orders`. In this demo, it fills in `RETAIL_DEMO.STAGING.STG_ORDERS` and tells dbt that this view must be ready before the fact model runs.
+- `source('retail_raw', 'ORDERS')` is a built-in dbt function that looks up an existing input table declared in [sources.yml](dbt/models/sources.yml). `retail_raw` is an alias for that source group; `ORDERS` is a table listed beneath it. The database and schema in that YAML resolve the input to `RETAIL_DEMO.RAW.ORDERS`.
+
+The flow is therefore `source('retail_raw', 'ORDERS') → stg_orders.sql → ref('stg_orders') → fact_orders.sql`. The column named `source` in the purchase data means manual/simulator and is unrelated to dbt's `source()` function.
+
+### What starts when dbt build runs?
+
+Airflow first changes its working directory to `/opt/demo/dbt`, then runs `dbt build --profiles-dir . --target demo` using the dbt environment's executable. The installed dbt command starts the tool; this project's starting configuration is [dbt_project.yml](dbt/dbt_project.yml), rather than one special entry-point SQL file.
+
+| Part of the command or project | What it means in plain language |
+|---|---|
+| `dbt build` | Discover models and run them with their data tests. |
+| Current directory `/opt/demo/dbt` | Find `dbt_project.yml` here. |
+| `--profiles-dir .` | Read `profiles.yml` from this same directory. |
+| `profile: retail_demo` | Select the matching connection-profile block in `profiles.yml`. |
+| `--target demo` | Select `outputs.demo` inside that profile. |
+| `model-paths: [models]` | Search `dbt/models` for the SQL files that define models. |
+| `test-paths: [tests]` | Find the additional SQL data-quality checks in `dbt/tests`. |
+| `ref()` relationships | Work out which models depend on which other models, so they run in a valid order. |
+
+In this project, dbt reads RAW through `stg_orders`, builds `fact_orders` from that staging view, checks the fact data, and creates `sales_by_minute` from the fact model. The SQL inside those files defines the transformations. Airflow's DAG only starts the command and checks whether it succeeds.
+
 ## Connect Power BI Desktop
 
 The generated project lives at `powerbi/RetailDemo.pbip`. Its semantic model uses Snowflake DirectQuery against `RETAIL_DEMO.MARTS.FACT_ORDERS`; its report includes revenue, transaction count, average basket, latest order ID, revenue over time, store comparison, and order detail.
 
 1. Open `powerbi/RetailDemo.pbip` in Power BI Desktop after the first dbt run succeeds. If Desktop requires its project-format preview setting, enable the relevant PBIP/PBIR feature and restart when prompted.
-2. Authenticate the Snowflake source when Desktop asks. If you normally sign into Snowflake with Google and have no password, choose **KeyPair**, enter username **ELT_SERVICE**, and select the local file `secrets/snowflake_key.p8`. This demo key is unencrypted, so no key passphrase is needed. The setup grants this user `RETAIL_REPORTER`, and the report activates that read-only role. Power BI keeps credentials locally, not in the Git project. A Google browser login does not automatically authenticate Power BI. You must complete the authentication dialog yourself.
+2. Authenticate the Snowflake source when Desktop asks. If you normally sign into Snowflake with Google and have no password, choose **KeyPair** and enter username **ELT_SERVICE**. If the dialog shows a large **Private Key** text box, open the local file `secrets/snowflake_key.p8` in a text editor, copy its entire contents including the BEGIN/END lines, and paste those contents into that box. Do not paste the file path there. If your version instead provides a file picker, select that file. Leave **Passphrase** blank because this demo key is unencrypted. The setup grants this user `RETAIL_REPORTER`, and the report activates that read-only role. Power BI keeps credentials locally, not in the Git project. A Google browser login does not automatically authenticate Power BI. You must complete the authentication dialog yourself. Never paste the private key into chat or commit it to GitHub.
 3. The source settings are the account's server hostname, warehouse `ELT_WH`, and role `RETAIL_REPORTER`. The report generator fills the server for this machine. For another account, run `python scripts/build_powerbi.py --server your-account.snowflakecomputing.com` before opening it.
 4. Select the report's blank canvas. In the page formatting pane, open **Page refresh**, enable **Auto page refresh**, and set its interval to **1 minute**. Save the project. Keep the report page active during the demo.
 5. Place another manual order in the UI. After the Airflow run and the next automatic page refresh, find the same ID in the report. This verifies the complete path.
@@ -213,4 +391,5 @@ Close Power BI's live report too, so it stops querying Snowflake and the warehou
 - [Power BI automatic page refresh](https://learn.microsoft.com/en-us/power-bi/create-reports/desktop-automatic-page-refresh)
 - [Power BI project source files](https://learn.microsoft.com/en-us/power-bi/developer/projects/projects-overview)
 - [Airflow Docker quick start](https://airflow.apache.org/docs/apache-airflow/2.10.5/howto/docker-compose/index.html)
+- [Airflow task-result summaries with XCom](https://airflow.apache.org/docs/apache-airflow/2.10.5/core-concepts/xcoms.html)
 - [dbt incremental models](https://docs.getdbt.com/docs/build/incremental-models)

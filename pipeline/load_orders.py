@@ -15,7 +15,8 @@ def load_orders():
             WHERE delivered_at IS NULL ORDER BY transaction_id LIMIT 5000''')]
     if not ids:
         print('No new orders. Nothing to load.')
-        return
+        # Airflow saves this small result under XCom -> return_value, including on an empty run.
+        return {'loaded_orders': 0, 'transaction_ids': [], 'ids_truncated': False}
 
     spark = (SparkSession.builder.master('local[2]').appName('Retail minute batch')
              .config('spark.jars', '/opt/jdbc/postgresql.jar')
@@ -60,6 +61,11 @@ def load_orders():
             # A crash before this point simply replays the same IDs next time.
             source.execute('UPDATE orders SET delivered_at=clock_timestamp() WHERE transaction_id=ANY(%s)', (ids,))
         print(f'Delivered {len(ids)} orders to Snowflake RAW.')
+        # Show purchase IDs in the task log so you can search for the order made in the UI.
+        print(f'Loaded transaction IDs (first 50): {ids[:50]}')
+        # Return only a small summary to Airflow; keep the actual purchase rows in the databases.
+        # A large batch lists its first 50 IDs and sets ids_truncated to tell you the list is incomplete.
+        return {'loaded_orders': len(ids), 'transaction_ids': ids[:50], 'ids_truncated': len(ids) > 50}
     finally:
         spark.stop()
 

@@ -1,17 +1,31 @@
-# Environment variables keep credentials out of the version-controlled profile.
+# --profiles-dir . tells dbt to read this profiles.yml from the current directory.
+# This profile name must match profile: retail_demo in dbt_project.yml.
 retail_demo:
+  # Choose demo when no --target is supplied; our Airflow command also selects it explicitly.
   target: demo
+  # Start the list of available named connection environments.
   outputs:
+    # --target demo chooses these Snowflake connection settings.
     demo:
+      # Use dbt's Snowflake adapter to execute the model SQL in Snowflake.
       type: snowflake
+      # Read the account identifier from the environment instead of putting machine-specific settings here.
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      # Read the service username from the environment; the pipeline uses ELT_SERVICE.
       user: "{{ env_var('SNOWFLAKE_USER') }}"
+      # Read the path to the mounted private-key file; the private key itself is never stored in this YAML.
       private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      # Select the pipeline's restricted role; use ELT_ROLE when no other role is configured.
       role: "{{ env_var('SNOWFLAKE_ROLE', 'ELT_ROLE') }}"
+      # Select the compute warehouse that executes our SQL; default to the demo warehouse.
       warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'ELT_WH') }}"
+      # Select the destination database; default to the database created by our setup script.
       database: "{{ env_var('SNOWFLAKE_DATABASE', 'RETAIL_DEMO') }}"
+      # Use MARTS as the default schema; the staging folder overrides it with STAGING.
       schema: MARTS
+      # Allow two dbt worker threads so independent tests can run at the same time.
       threads: 2
+      # Close dbt's connection sessions normally instead of keeping them alive after the command exits.
       client_session_keep_alive: false
-      # The Snowflake dbt adapter exposes query_tag as a direct profile setting.
+      # Label these queries so you can recognize dbt's work in Snowflake Query History.
       query_tag: retail-elt-demo-dbt

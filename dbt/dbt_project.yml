@@ -1,15 +1,29 @@
+# dbt reads this project file when the command starts in this folder.
+# Give the project a name; use the same name under the models settings below.
 name: retail_demo
+# Label this project's version for documentation; this is not the installed dbt version.
 version: '1.0.0'
+# Use version 2 of dbt's project-file format so dbt understands these settings.
 config-version: 2
+# Find the connection profile named retail_demo inside profiles.yml.
 profile: retail_demo
+# Search the models folder for SQL model files; dbt build discovers them instead of calling main.sql.
 model-paths: [models]
+# Search the tests folder for our SQL checks; dbt build runs those checks as well as models.
 test-paths: [tests]
+# These are generated folders that dbt clean may remove; source SQL files are not listed here.
 clean-targets: [target, dbt_packages]
+# Start settings that control how dbt creates the discovered SQL models.
 models:
+  # Apply the following settings to models belonging to this project.
   retail_demo:
-    # Staging views clean raw data; reporting models live in MARTS.
+    # Apply these settings to SQL files inside models/staging.
     staging:
+      # Place staging objects in Snowflake's STAGING schema; our schema-name macro keeps this exact name.
       +schema: STAGING
+      # Create views for staging SQL, so staging presents current RAW rows without copying them again.
       +materialized: view
+    # Apply these settings to SQL files inside models/marts.
     marts:
+      # Put business/reporting models in MARTS; each model can set its own table/view/incremental type.
       +schema: MARTS
