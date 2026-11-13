@@ -114,7 +114,15 @@ The script builds the Docker image, tests the service account against Snowflake,
 Open:
 
 - Order UI: [http://localhost:8000](http://localhost:8000)
-- Airflow: [http://localhost:8080](http://localhost:8080), username `demo`, password `demo_local_only`
+- Airflow: [http://localhost:8080](http://localhost:8080)
+
+Airflow login and job:
+
+1. **Username:** `demo`
+2. **Password:** `demo_local_only`
+3. **DAG:** `retail_every_minute`
+
+After signing in, select `retail_every_minute` and open **Grid** to review each one-minute run. Each run shows the Spark loading task followed by the dbt models and tests. Green means the task succeeded; click a task to read its logs.
 
 The PostgreSQL username/password in Compose and the Airflow login are deliberately local demo values. Ports are bound to `127.0.0.1`. Do not expose this setup on a shared network.
 
