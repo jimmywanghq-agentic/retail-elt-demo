@@ -106,6 +106,8 @@ def build(server):
     })
     save('RetailDemo.Report/definition/report.json', {
         '$schema': 'https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/3.0.0/schema.json',
+        # Even when no custom theme is used, PBIR requires this object.
+        'themeCollection': {},
         'settings': {'useStylableVisualContainerHeader': True},
     })
     save('RetailDemo.Report/definition/pages/pages.json', {
