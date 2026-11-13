@@ -316,6 +316,38 @@ Airflow first changes its working directory to `/opt/demo/dbt`, then runs `dbt b
 
 In this project, dbt reads RAW through `stg_orders`, builds `fact_orders` from that staging view, checks the fact data, and creates `sales_by_minute` from the fact model. The SQL inside those files defines the transformations. Airflow's DAG only starts the command and checks whether it succeeds.
 
+### Step by step: how dbt knows what to run next
+
+There is no `main.sql` or `demo.sql`. The installed dbt command starts the work. `demo` is only the name of a connection target in `profiles.yml`.
+
+For example, from the project's `dbt` folder:
+
+```bash
+dbt run --profiles-dir . --target demo
+```
+
+1. **Read `dbt_project.yml`.** `profile: retail_demo` names the connection profile, and `model-paths: [models]` tells dbt where to find the SQL models.
+2. **Read `profiles.yml`.** `--profiles-dir .` means the current folder. `--target demo` selects `retail_demo.outputs.demo`, which contains the Snowflake connection settings. It does not select a SQL file.
+3. **Read the model files and discover dependencies.** In `fact_orders.sql`, `ref('stg_orders')` means staging must be ready first. In `sales_by_minute.sql`, `ref('fact_orders')` means the fact model must be ready first. The order comes from `ref()`, not alphabetical filenames.
+4. **Compile and execute the models in dependency order.** dbt replaces `ref()` and `source()` with database object names. Materialization settings tell it to create a view, create a table, or merge incremental rows.
+
+```text
+RETAIL_DEMO.RAW.ORDERS       Existing table loaded by Spark
+    |
+    v
+stg_orders.sql              Creates the staging view
+    |
+    v
+fact_orders.sql             Creates or updates the incremental fact table
+    |
+    v
+sales_by_minute.sql          Creates the summary view
+```
+
+`source('retail_raw', 'ORDERS')` identifies the existing RAW table through `models/sources.yml`; dbt does not load that table from PostgreSQL.
+
+Airflow uses `dbt build --profiles-dir . --target demo`. It follows these same dependencies and also runs the data tests. Every minute, Airflow starts a new command after the Spark loading task succeeds. Later runs merge new arrivals into the existing fact table.
+
 ## Connect Power BI Desktop
 
 The generated project lives at `powerbi/RetailDemo.pbip`. Its semantic model uses Snowflake DirectQuery against `RETAIL_DEMO.MARTS.FACT_ORDERS`; its report includes revenue, transaction count, average basket, latest order ID, revenue over time, store comparison, and order detail.
