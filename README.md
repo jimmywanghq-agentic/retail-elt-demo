@@ -459,7 +459,92 @@ LIMIT 10;
 
 If the existing-file link no longer opens the editor, click **Workspaces** in Snowflake's left navigation. Open **My Workspace**, use **Add new** or the **New file** button, and choose a SQL file. Paste and run the same query there.
 
-## Connect Power BI Desktop
+## Optional: build a simple Power BI report yourself
+
+The ELT pipeline finishes in Snowflake. This Power BI report is optional; it is not needed for the pipeline to run. Follow these steps to create two cards and one table from the final dbt summary view, `RETAIL_DEMO.MARTS.SALES_BY_MINUTE`. No DAX code is required.
+
+### 1. Open a blank report and connect
+
+1. Open **Power BI Desktop** from the Windows Start menu or taskbar.
+2. Choose **File → New → Report**, or **Blank report** on the start screen. Save any existing report first if asked.
+3. On the top ribbon, choose **Home → Get data → More**. Search for **Snowflake**, select it, and click **Connect**.
+4. Enter server `CQCLXXG-EF86683.snowflakecomputing.com` (without `https://`) and warehouse `ELT_WH`.
+5. In **Advanced options**, enter role `RETAIL_REPORTER` and database `RETAIL_DEMO` if those fields are available. Leave the SQL statement box empty.
+6. Choose **DirectQuery** when offered the choice between Import and DirectQuery, either here or after selecting the view. DirectQuery reads the current data from Snowflake.
+7. Click **OK**. Power BI may reuse the credentials you already entered. If asked to sign in, choose **KeyPair**, username `ELT_SERVICE`, and paste the complete contents of your local `secrets/snowflake_key.p8` into **Private Key**, including the BEGIN/END lines. This text box needs the key contents, not the file path. If your version offers a file picker, select the file instead. Leave **Passphrase** blank for the unencrypted demo key and click **Connect**. Keep this key out of chat and GitHub.
+
+### 2. Select the summary view
+
+1. In **Navigator**, expand **RETAIL_DEMO → MARTS**.
+2. Check **SALES_BY_MINUTE**. This object is a view, so look among the views as well as tables.
+3. Click **Load**. If prompted for connection mode, select **DirectQuery**, then **OK**.
+4. Click the chart-shaped **Report view** icon on the left.
+5. Expand `SALES_BY_MINUTE` in the **Data** pane on the right (called **Fields** in some versions). You should see `ORDER_MINUTE`, `STORE`, `ORDER_COUNT`, `ITEMS_SOLD`, and `NET_REVENUE`.
+6. If Data or Visualizations is hidden, enable the pane under **View → Panes**.
+
+### 3. Add a total revenue card
+
+1. Click an empty part of the white report canvas.
+2. In **Visualizations**, select **Card**. Hover over an icon to see its name.
+3. Drag `NET_REVENUE` from the Data pane into the card's **Values** or **Data** field well.
+4. Open the field's dropdown in that well and choose **Sum**.
+5. Move the card to the top left. In **Format visual → General → Title**, enable the title and enter **Total revenue**. If your version places this setting elsewhere, use the formatting pane's search for **Title**.
+
+### 4. Add a total orders card
+
+1. Click a blank part of the canvas so the first card is no longer selected.
+2. Select **Card** again and drag `ORDER_COUNT` into its **Values** or **Data** field well.
+3. Choose **Sum** as the aggregation and set the title to **Total orders**.
+4. Move the card beside the revenue card.
+
+Use **Sum of ORDER_COUNT**, not **Count of ORDER_COUNT**. Each source row represents one minute/store group, not one purchase. Adding the stored counts gives the number of purchases.
+
+### 5. Add the latest sales table
+
+1. Click a blank part of the canvas, then select **Table** in Visualizations.
+2. Drag these fields into the table in order: `ORDER_MINUTE`, `STORE`, `ORDER_COUNT`, `ITEMS_SOLD`, `NET_REVENUE`.
+3. If `ORDER_MINUTE` becomes a date hierarchy, use its field dropdown to choose the plain **ORDER_MINUTE** field instead. Use **Don't summarize** for that timestamp if needed.
+4. Keep **Sum** for the three numeric fields.
+5. Click the `ORDER_MINUTE` column header until the newest minute appears first.
+6. Resize the table to fill the space below the cards.
+
+This view has no transaction IDs. A new order either adds a minute/store group or increases an existing group's counts and revenue. To inspect an individual transaction ID, query `MARTS.FACT_ORDERS` in Snowflake.
+
+### 6. Refresh the page every minute
+
+1. Click an empty part of the canvas so no visual is selected.
+2. In Visualizations, open **Format page** using the formatting/paintbrush icon.
+3. Find **Page refresh** and turn it on. Choose **Automatic page refresh** / **Fixed interval**, and set **1 minute**.
+4. If Page refresh is missing, check that the table uses **DirectQuery**, not Import. In Model view, select the table and inspect its **Storage mode** property. Reconnect using DirectQuery if it was imported.
+5. Keep this report page active during your demo.
+
+Airflow's schedule and Power BI's refresh use separate clocks. Allow roughly one to two minutes plus processing time for an order to appear. These instructions apply to Desktop; published reports have additional capacity-dependent refresh limits.
+
+### 7. Save and verify the change
+
+1. Choose **File → Save as** and save a separate report, for example `RetailSimple.pbix`, somewhere you can find it again. Do not copy private keys into repository files.
+2. Note the current totals on both cards and leave the order simulator off.
+3. Open [the order UI](http://localhost:8000). Submit one Coffee order with quantity **2** and discount **10%**. Its expected net revenue is **$8.10**.
+4. Open [Airflow](http://localhost:8080), sign in with username `demo` and password `demo_local_only`, and select `retail_every_minute`. Wait for a run after your submission to complete both tasks successfully.
+5. In Snowflake's SQL editor, run this query to check the same summary view used by this report:
+
+```sql
+-- Read the final sales summary produced by dbt.
+SELECT *
+FROM RETAIL_DEMO.MARTS.SALES_BY_MINUTE
+ORDER BY ORDER_MINUTE DESC, STORE
+LIMIT 10;
+```
+
+6. Return to Power BI. After its next page refresh, **Total orders** should increase by one and **Total revenue** by **$8.10**, assuming no other orders or report filters.
+7. If Snowflake is current but the report is not, use **Home → Refresh** for a manual check, then recheck DirectQuery and Page refresh settings.
+8. Save the report and close it when finished so it stops querying Snowflake.
+
+Reference: Microsoft's [Snowflake connector instructions](https://learn.microsoft.com/en-us/power-query/connectors/snowflake) and [automatic page refresh instructions](https://learn.microsoft.com/en-us/power-bi/create-reports/desktop-automatic-page-refresh).
+
+### Older generated report: separate from this manual tutorial
+
+The generated report below uses `FACT_ORDERS`. Its visual layout and automatic refresh have not been fully verified in Desktop. Use the manual tutorial above for the simple `SALES_BY_MINUTE` report.
 
 The generated project lives at `powerbi/RetailDemo.pbip`. Its semantic model uses Snowflake DirectQuery against `RETAIL_DEMO.MARTS.FACT_ORDERS`; its report includes revenue, transaction count, average basket, latest order ID, revenue over time, store comparison, and order detail.
 
