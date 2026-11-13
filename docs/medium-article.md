@@ -232,3 +232,37 @@ Try submitting one order and tracing its ID before turning on the generator. Tha
 Source code and full tutorial: https://github.com/jwangdbe/retail-elt-demo
 
 Cover illustration generated with AI for this article.
+
+## 📸 Follow the demo, step by step
+
+These screenshots show the running learning environment. The order UI and the illustrated Airflow run were captured at different moments; use transaction IDs when tracing one specific purchase.
+
+### ☕ Step 1: submit an order
+
+The separate order UI saves purchases in PostgreSQL. The queue shows how many orders are still waiting for delivery to Snowflake RAW.
+
+![Order entry and PostgreSQL delivery queue](screenshots/01-order-ui.jpg)
+
+### ⚙️ Step 2: inspect the workflow
+
+Airflow connects the Spark loading task to the dbt build task. Both tasks in this captured run succeeded.
+
+![Airflow workflow with two successful tasks](screenshots/02-airflow-workflow.jpg)
+
+### 📥 Step 3: inspect the delivered transaction
+
+The Spark task log confirms that transaction 44 was delivered to Snowflake RAW. The small returned summary is also available through XCom.
+
+![Spark task log with delivered transaction ID](screenshots/03-spark-load.jpg)
+
+### ✅ Step 4: check the dbt models and tests
+
+The transformation task builds three models and runs six tests. PASS=9 and return code 0 confirm successful execution; they are not a count of orders.
+
+![dbt transformation and test results](screenshots/04-dbt-results.jpg)
+
+### ❄️ Step 5: query the final sales summary
+
+Snowflake displays SALES_BY_MINUTE grouped by minute and store. A new purchase adds a group or changes the count, quantity, and revenue of an existing group.
+
+![Snowflake query and final sales summary](screenshots/05-snowflake-results.jpg)
