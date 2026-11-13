@@ -431,6 +431,32 @@ ORDER BY ORDER_MINUTE DESC
 LIMIT 10;
 ```
 
+### Open the Snowflake SQL editor and see your orders
+
+Start with these steps if you do not know where to enter SQL:
+
+1. Open [the demo account's existing Untitled.sql editor](https://app.snowflake.com/cqclxxg/ef86683/#/workspaces/ws/USER%24/PUBLIC/DEFAULT%24/Untitled.sql). Sign in to Snowflake if needed. This link is specific to the account used for this demo.
+2. Find the **Untitled.sql** tab. The large area containing SQL text is the editor. The database list on the left is for browsing objects; enter your query in the editor.
+3. Click inside the SQL text area. Press **Ctrl+A** to select the existing SQL, then replace it with the query below. Replacing the text does not undo SQL that was already executed.
+
+```sql
+-- Choose the Snowflake compute warehouse that will execute this query.
+USE WAREHOUSE ELT_WH;
+
+-- Read the latest ten orders after dbt calculated revenue and discounts.
+SELECT *
+FROM RETAIL_DEMO.MARTS.FACT_ORDERS
+ORDER BY TRANSACTION_ID DESC
+LIMIT 10;
+```
+
+4. While your cursor is inside the SQL editor, press **Ctrl+A** again to select both statements. Click **Run selected** above the editor.
+5. Look at the **Results** area underneath the editor. The SELECT result shows the latest ten transformed orders. If the result shown is only the warehouse-selection message, select just the `SELECT` statement and run it again.
+
+`ELT_WH` is the compute warehouse that executes SQL. `RETAIL_DEMO` is the database, `MARTS` is the schema, and `FACT_ORDERS` is the reporting table. Using the full table name means you do not have to select the database and schema separately.
+
+If the existing-file link no longer opens the editor, click **Workspaces** in Snowflake's left navigation. Open **My Workspace**, use **Add new** or the **New file** button, and choose a SQL file. Paste and run the same query there.
+
 ## Connect Power BI Desktop
 
 The generated project lives at `powerbi/RetailDemo.pbip`. Its semantic model uses Snowflake DirectQuery against `RETAIL_DEMO.MARTS.FACT_ORDERS`; its report includes revenue, transaction count, average basket, latest order ID, revenue over time, store comparison, and order detail.
