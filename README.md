@@ -348,6 +348,89 @@ sales_by_minute.sql          Creates the summary view
 
 Airflow uses `dbt build --profiles-dir . --target demo`. It follows these same dependencies and also runs the data tests. Every minute, Airflow starts a new command after the Spark loading task succeeds. Later runs merge new arrivals into the existing fact table.
 
+### Understand the dbt task logs: what each step does
+
+dbt runs the SQL models to turn raw purchases into reporting data, then checks that the results are valid. Airflow's `dbt_incremental_models_and_tests` task uses `dbt build`, so its logs include both models and tests.
+
+**1. Prepare the connection and discover the work.**
+
+```text
+Registered adapter: snowflake=1.9.2
+Found 3 models, 6 data tests, 1 source, 476 macros
+Concurrency: 2 threads (target='demo')
+```
+
+dbt finds the three SQL models, six checks, and RAW source declaration. It uses the Snowflake connection settings named `demo`. Two threads allow independent work to run at the same time. The macros are available helper functions, not 476 jobs being run. The macro count can change with installed packages and versions.
+
+**2. Create the staging view.**
+
+```text
+START sql view model STAGING.stg_orders
+```
+
+dbt runs [stg_orders.sql](dbt/models/staging/stg_orders.sql) to create or replace `RETAIL_DEMO.STAGING.STG_ORDERS`. This view selects columns from `RAW.ORDERS` and sets their data types. A view stores a query; it does not copy the orders into another table.
+
+**3. Update the reporting table.**
+
+```text
+START sql incremental model MARTS.fact_orders
+```
+
+dbt runs [fact_orders.sql](dbt/models/marts/fact_orders.sql). It reads the staging view and calculates gross revenue, discount amount, and net revenue. For example:
+
+| Purchase or calculation | Value |
+|---|---|
+| Quantity | 2 |
+| Unit price | $4.50 |
+| Discount | 10% |
+| Gross revenue: quantity multiplied by unit price | $9.00 |
+| Discount amount: gross revenue multiplied by 10% | $0.90 |
+| Net revenue: gross revenue minus discount amount | $8.10 |
+
+On the first run, dbt creates the fact table. On later runs, it selects arrivals using `loaded_at` and merges them by `transaction_id`. Existing historical rows remain in the table. The filter includes equal loading timestamps, so a later run can recheck some rows; the merge prevents duplicate transaction IDs.
+
+**4. Check the reporting data.**
+
+```text
+PASS not_null_fact_orders_net_revenue
+PASS unique_fact_orders_transaction_id
+```
+
+The six tests check that revenue, order time, and transaction ID are not missing; transaction IDs are unique; transformation timestamps do not precede loading timestamps; and order amounts satisfy the rules in the test SQL. These tests check the resulting data. They do not calculate or fix it. `PASS` means the test found no rows that violate its rule.
+
+**5. Create the sales summary view.**
+
+```text
+START sql view model MARTS.sales_by_minute
+```
+
+dbt runs [sales_by_minute.sql](dbt/models/marts/sales_by_minute.sql). This view groups the fact table by minute and store to show order counts, items sold, and total revenue. In the example log it runs after the fact tests; dbt can schedule independent work concurrently, so use the `ref()` dependencies to understand the required model order.
+
+**6. Report success back to Airflow.**
+
+```text
+PASS=9 WARN=0 ERROR=0 SKIP=0 TOTAL=9
+Command exited with return code 0
+```
+
+All three models and six tests succeeded: nine operations in total. Return code `0` tells Airflow the command succeeded, so it marks the task green. A model line such as `SUCCESS 2` is an adapter execution result; it does not necessarily mean two newly added orders, because a merge can also affect rows already present.
+
+The transformed rows stay in Snowflake. These logs show whether the work succeeded; they do not print the order rows. To inspect the actual results in a Snowflake worksheet:
+
+```sql
+-- Show the latest purchases after dbt calculated revenue and discounts.
+SELECT *
+FROM RETAIL_DEMO.MARTS.FACT_ORDERS
+ORDER BY TRANSACTION_ID DESC
+LIMIT 10;
+
+-- Show the sales totals grouped by minute and store.
+SELECT *
+FROM RETAIL_DEMO.MARTS.SALES_BY_MINUTE
+ORDER BY ORDER_MINUTE DESC
+LIMIT 10;
+```
+
 ## Connect Power BI Desktop
 
 The generated project lives at `powerbi/RetailDemo.pbip`. Its semantic model uses Snowflake DirectQuery against `RETAIL_DEMO.MARTS.FACT_ORDERS`; its report includes revenue, transaction count, average basket, latest order ID, revenue over time, store comparison, and order detail.
